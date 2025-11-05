@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Recipe Tiles – Fixed Version</title>
+<title>Recipe Tiles – Working Version</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 /* ---------- Layout ---------- */
@@ -14,10 +14,10 @@ body{
 }
 h1{font-size:1.8rem;margin-bottom:1rem;}
 h2{font-size:1.4rem;margin:1rem 0 .5rem;color:#333;}
-.grid{display:grid; grid-template-columns: 1fr;}
+.grid{display:grid;}
 .gap-4{gap:1rem;}
 
-/* Responsive grid */
+/* Responsive grid - simplified */
 @media (min-width: 480px) {
   .grid { grid-template-columns: repeat(2, 1fr); }
 }
@@ -67,7 +67,9 @@ h2{font-size:1.4rem;margin:1rem 0 .5rem;color:#333;}
 
 /* ---------- Modal ---------- */
 .modal{
-  position:fixed; inset:0; background:rgba(0,0,0,.4);
+  position:fixed;
+  top:0; left:0; right:0; bottom:0;
+  background:rgba(0,0,0,.4);
   display:flex; align-items:center; justify-content:center;
   visibility:hidden; opacity:0; transition:opacity .2s;
 }
@@ -95,7 +97,7 @@ button{font:inherit;cursor:pointer;}
 </head>
 <body>
 
-<h1>Recipe Tiles – Fixed Version</h1>
+<h1>Recipe Tiles – Working Version</h1>
 
 <div id="gallery"></div>
 
@@ -105,9 +107,9 @@ button{font:inherit;cursor:pointer;}
   </button>
 </div>
 
-<div id="modal" class="modal" role="dialog" aria-modal="true">
+<div id="modal" class="modal">
   <div class="dialog">
-    <button class="close" aria-label="Close">&times;</button>
+    <button class="close">&times;</button>
     <h2 id="modal-title"></h2>
     <ul id="modal-body"></ul>
     <div id="modal-actions" style="margin-top:1rem;text-align:right;"></div>
@@ -115,7 +117,6 @@ button{font:inherit;cursor:pointer;}
 </div>
 
 <script>
-/* ---------- Helper: round up to a realistic purchase size ---------- */
 function roundAmount(unit, amount) {
   if (!unit) return Math.ceil(amount);
   var u = unit.toLowerCase();
@@ -125,7 +126,6 @@ function roundAmount(unit, amount) {
   return Math.ceil(amount);
 }
 
-/* ---------- Recipe data ---------- */
 var recipes = [
   { id:1, title:"Spaghetti Carbonara",
     image:"https://picsum.photos/seed/spaghetti/400/300",
@@ -207,75 +207,69 @@ var recipes = [
   }
 ];
 
-/* ---------- Global state ---------- */
 var selected = {};
 var tileCounter = 1;
 
-/* ---------- Modal helpers ---------- */
 var modal = document.getElementById('modal');
 var modalTitle = document.getElementById('modal-title');
-var modalBody  = document.getElementById('modal-body');
+var modalBody = document.getElementById('modal-body');
 var modalActions = document.getElementById('modal-actions');
 
-document.querySelector('#modal .close').onclick = function () {
+document.querySelector('.close').onclick = function () {
   modal.className = 'modal';
 };
 modal.onclick = function (e) {
   if (e.target === modal) { modal.className = 'modal'; }
 };
 
-/* ---------- Render gallery ---------- */
 function renderGallery() {
   var container = document.getElementById('gallery');
   container.innerHTML = '';
   tileCounter = 1;
 
   var categories = { beef: [], chicken: [], pork: [], veggie: [] };
-  var i, r, cat, section, heading, grid, card, num;
-
-  // split recipes by category
-  for (i = 0; i < recipes.length; i++) {
-    r = recipes[i];
-    cat = (r.category || 'veggie').toLowerCase();
+  
+  for (var i = 0; i < recipes.length; i++) {
+    var r = recipes[i];
+    var cat = (r.category || 'veggie').toLowerCase();
     if (!categories[cat]) { categories[cat] = []; }
     categories[cat].push(r);
   }
 
-  // create sections
-  for (cat in categories) {
+  for (var cat in categories) {
     if (categories.hasOwnProperty(cat) && categories[cat].length) {
-      section = document.createElement('section');
+      var section = document.createElement('section');
 
-      heading = document.createElement('h2');
+      var heading = document.createElement('h2');
       heading.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
       section.appendChild(heading);
 
-      grid = document.createElement('div');
+      var grid = document.createElement('div');
       grid.className = 'grid gap-4';
 
-      for (i = 0; i < categories[cat].length; i++) {
-        r = categories[cat][i];
-        card = document.createElement('div');
+      for (var j = 0; j < categories[cat].length; j++) {
+        var recipe = categories[cat][j];
+        var card = document.createElement('div');
         card.className = 'recipe-card';
-        if (selected[r.id]) { card.className += ' selected'; }
+        if (selected[recipe.id]) { card.className += ' selected'; }
 
-        card.innerHTML = '<img src="' + r.image + '" alt="' + r.title + '">'
-                       + '<div class="title">' + r.title + '</div>';
+        card.innerHTML = '<img src="' + recipe.image + '" alt="' + recipe.title + '">' +
+                         '<div class="title">' + recipe.title + '</div>';
 
-        num = document.createElement('span');
+        var num = document.createElement('span');
         num.className = 'tile-number';
         num.textContent = tileCounter++;
         card.insertBefore(num, card.firstChild);
 
-        (function (recipe, element) {
+        (function (r, element) {
           element.onclick = function (e) {
             if (e.shiftKey || e.ctrlKey || e.metaKey) {
-              toggleSelect(recipe.id, element);
+              toggleSelect(r.id, element);
             } else {
-              openIngredientModal(recipe);
+              openIngredientModal(r);
             }
           };
-        })(r, card);
+        })(recipe, card);
 
         grid.appendChild(card);
       }
@@ -286,64 +280,54 @@ function renderGallery() {
   }
 }
 
-/* ---------- Toggle selection ---------- */
 function toggleSelect(id, element) {
   if (selected[id]) {
     delete selected[id];
-    element.className = element.className.replace(/\bselected\b/g, '').replace(/\s+/g, ' ').trim();
+    element.className = element.className.replace(' selected', '');
   } else {
     selected[id] = true;
-    if (element.className.indexOf('selected') === -1) {
-      element.className += ' selected';
-    }
+    element.className += ' selected';
   }
   document.getElementById('count').textContent = Object.keys(selected).length;
   document.getElementById('make-list').disabled = Object.keys(selected).length === 0;
 }
 
-/* ---------- Ingredient modal ---------- */
 function openIngredientModal(recipe) {
   modalTitle.textContent = recipe.title;
   var html = '';
-  var i;
-  for (i = 0; i < recipe.ingredients.length; i++) {
+  for (var i = 0; i < recipe.ingredients.length; i++) {
     var ing = recipe.ingredients[i];
     html += '<li>' + ing.amount + ' ' + ing.unit + ' ' + ing.name + '</li>';
   }
   modalBody.innerHTML = html;
-  modalActions.innerHTML = '<button class="btn btn-secondary" id="select-toggle">'
-                         + (selected[recipe.id] ? 'Deselect' : 'Select')
-                         + '</button>';
+  modalActions.innerHTML = '<button class="btn btn-secondary" id="select-toggle">' +
+                          (selected[recipe.id] ? 'Deselect' : 'Select') + '</button>';
 
   document.getElementById('select-toggle').onclick = function () {
     var cards = document.getElementsByClassName('recipe-card');
-    var j, card;
-    for (j = 0; j < cards.length; j++) {
+    for (var j = 0; j < cards.length; j++) {
       if (cards[j].querySelector('.title').textContent === recipe.title) {
-        card = cards[j];
+        toggleSelect(recipe.id, cards[j]);
         break;
       }
     }
-    toggleSelect(recipe.id, card);
     this.textContent = selected[recipe.id] ? 'Deselect' : 'Select';
   };
 
   modal.className = 'modal show';
 }
 
-/* ---------- Build shopping list ---------- */
 function buildShoppingList() {
   modal.className = 'modal';
 
   var aggregated = {};
-  var i, r, ing, key;
 
-  for (i = 0; i < recipes.length; i++) {
-    r = recipes[i];
+  for (var i = 0; i < recipes.length; i++) {
+    var r = recipes[i];
     if (!selected[r.id]) continue;
     for (var j = 0; j < r.ingredients.length; j++) {
-      ing = r.ingredients[j];
-      key = ing.name + '|' + (ing.unit || '');
+      var ing = r.ingredients[j];
+      var key = ing.name + '|' + (ing.unit || '');
       if (!aggregated[key]) {
         aggregated[key] = {name: ing.name, unit: ing.unit, amount: 0};
       }
@@ -352,7 +336,7 @@ function buildShoppingList() {
   }
 
   var list = [];
-  for (key in aggregated) {
+  for (var key in aggregated) {
     if (aggregated.hasOwnProperty(key)) {
       var item = aggregated[key];
       item.amount = roundAmount(item.unit, item.amount);
@@ -368,11 +352,42 @@ function buildShoppingList() {
     html += '<li>' + it.amount + ' ' + it.unit + ' ' + it.name + '</li>';
   }
   modalBody.innerHTML = html;
-  modalActions.innerHTML = '<button class="btn btn-primary" id="copy-list">Copy</button>'
-                         + '<button class="btn btn-primary" id="download-list">Download .txt</button>';
+  modalActions.innerHTML = '<button class="btn btn-primary" id="copy-list">Copy</button>' +
+                          '<button class="btn btn-primary" id="download-list">Download .txt</button>';
 
   document.getElementById('copy-list').onclick = function () {
     var txt = '';
     for (var m = 0; m < list.length; m++) {
       var it = list[m];
-      txt += it.amount + ' ' + it.
+      txt += it.amount + ' ' + it.unit + ' ' + it.name + '\n';
+    }
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(txt).then(function () { alert('Copied!'); });
+    } else {
+      alert('Copy not supported. Please copy manually.');
+    }
+  };
+
+  document.getElementById('download-list').onclick = function () {
+    var txt = '';
+    for (var n = 0; n < list.length; n++) {
+      var it = list[n];
+      txt += it.amount + ' ' + it.unit + ' ' + it.name + '\n';
+    }
+    var blob = new Blob([txt], {type:'text/plain'});
+    var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+    a.download = 'shopping-list.txt';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  modal.className = 'modal show';
+}
+
+document.getElementById('make-list').onclick = buildShoppingList;
+
+renderGallery();
+</script>
+</body>
+</html>
