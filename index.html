@@ -55,6 +55,7 @@ h2{font-size:1.4rem;margin:1rem 0 .5rem;color:#333;}
   color:rgba(255,255,255,0.5);
   font-weight:bold;
   font-size:1.1rem;
+  z-index:10;
 }
 
 /* --------------------------------------------------------------
@@ -118,21 +119,19 @@ button{font:inherit;cursor:pointer;}
 
 <script>
 /* ==============================================================
-   0️⃣  HELPERS – rounding, random data, etc.
+   0️⃣  HELPERS – rounding, etc.
    ============================================================== */
 function roundAmount(unit, amount){
-  // No unit → treat as count → round up to whole number
-  if (!unit) return Math.ceil(amount);
+  if (!unit) return Math.ceil(amount);                // count → whole number
   const u = unit.toLowerCase();
-  if (u === 'g' || u === 'kg')  return Math.ceil(amount/50)*50;   // nearest 50 g
-  if (u === 'ml' || u === 'l')  return Math.ceil(amount/100)*100; // nearest 100 ml
+  if (u === 'g' || u === 'kg') return Math.ceil(amount/50)*50;   // 50 g steps
+  if (u === 'ml' || u === 'l') return Math.ceil(amount/100)*100; // 100 ml steps
   if (u === 'tbsp' || u === 'tsp' || u === 'cup') return Math.ceil(amount);
-  // fallback – whole number
   return Math.ceil(amount);
 }
 
 /* ==============================================================
-   1️⃣  RECIPE DATA – now includes a `category` field
+   1️⃣  RECIPE DATA – includes a `category` field
    ============================================================== */
 const recipes = [
   {
@@ -179,7 +178,7 @@ const recipes = [
     id:4,
     title:"Sushi Platter",
     image:"https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=400&q=80",
-    category:"pork",               // just for demo purposes
+    category:"pork",               // demo‑only
     ingredients:[
       {name:"Sushi rice", unit:"g", amount:250},
       {name:"Nori sheets",unit:"pcs", amount:5},
@@ -232,8 +231,8 @@ const recipes = [
 /* ==============================================================
    2️⃣  GLOBAL STATE
    ============================================================== */
-const selected = new Set();               // recipe IDs the user selected
-let tileCounter = 1;                      // increments for the overlay number
+const selected = new Set();   // IDs of recipes the user selected
+let tileCounter = 1;          // will be reset each render
 
 /* --------------------------------------------------------------
    3️⃣  MODAL LOGIC (open / close)
@@ -250,25 +249,21 @@ modal.addEventListener('click', e => { if(e.target===modal) modal.classList.remo
    -------------------------------------------------------------- */
 function renderGallery(){
   const container = document.getElementById('gallery');
-  container.innerHTML = '';               // clear previous content
+  container.innerHTML = '';
+  tileCounter = 1;                       // start numbers again
 
-  const categories = {
-    beef:    [],
-    chicken: [],
-    pork:    [],
-    veggie:  []
-  };
+  const categories = { beef: [], chicken: [], pork: [], veggie: [] };
 
-  // split recipes by category
+  // split recipes by category (fallback to veggie)
   recipes.forEach(r => {
     const cat = (r.category||'veggie').toLowerCase();
-    if (!categories[cat]) categories[cat] = [];   // safety net
+    if (!categories[cat]) categories[cat] = [];
     categories[cat].push(r);
   });
 
-  // for each category that actually has recipes, create a section
+  // create a section for each non‑empty category
   Object.entries(categories).forEach(([cat, recs]) => {
-    if (!recs.length) return; // skip empty categories
+    if (!recs.length) return;
 
     const section = document.createElement('section');
 
@@ -284,18 +279,19 @@ function renderGallery(){
       card.className = 'recipe-card';
       if (selected.has(recipe.id)) card.classList.add('selected');
 
-      // number overlay (unique, never repeats)
-      const numberOverlay = document.createElement('span');
-      numberOverlay.className = 'tile-number';
-      numberOverlay.textContent = tileCounter++;
-      card.appendChild(numberOverlay);
-
-      card.innerHTML += `
+      /* ---- build the inner HTML first ---- */
+      card.innerHTML = `
         <img src="${recipe.image}" alt="${recipe.title}">
         <div class="title">${recipe.title}</div>
       `;
 
-      // click handling – shift/ctrl toggles selection, plain click opens ingredient view
+      /* ---- number overlay (unique) ---- */
+      const numberOverlay = document.createElement('span');
+      numberOverlay.className = 'tile-number';
+      numberOverlay.textContent = tileCounter++;
+      card.prepend(numberOverlay);      // put it on top of the image
+
+      /* ---- click handling ---- */
       card.addEventListener('click', e => {
         if (e.shiftKey || e.ctrlKey || e.metaKey) {
           toggleSelect(recipe.id, card);
@@ -340,445 +336,8 @@ function openIngredientModal(recipe){
     </button>
   `;
 
-  // toggle‑selection button inside the modal
+  // toggle‑selection button inside the ingredient modal
   document.getElementById('select-toggle').onclick = () => {
-    // find the card element that belongs to this recipe
     const card = [...document.querySelectorAll('.recipe-card')]
                  .find(c => c.querySelector('.title').textContent===recipe.title);
-    toggleSelect(recipe.id, card);
-    // update button label
-    document.getElementById('select-toggle')
-            .textContent = selected.has(recipe.id) ? 'Deselect' : 'Select';
-  };
-
-  modal.classList.add('show');
-}
-
-/* --------------------------------------------------------------
-   7️⃣  BUILD THE AGGREGATED SHOPPING LIST
-   -------------------------------------------------------------- */
-function buildShoppingList(){
-  // close any open ingredient modal first
-  modal.classList.remove('show');
-
-  const aggregated = {};
-
-  // 1️⃣  iterate over selected recipes
-  recipes.filter(r => selected.has(r.id)).forEach(r => {
-    r.ingredients.forEach(ing => {
-      const key = `${ing.name}|${ing.unit||''}`;
-      if (!aggregated[key]) {
-        aggregated[key] = {name: ing.name, unit: ing.unit, amount: 0};
-      }
-      aggregated[key].amount += ing.amount;
-    });
-  });
-
-  // 2️⃣  turn into sorted array and round amounts
-  const list = Object.values(aggregated)
-    .sort((a,b)=>a.name.localeCompare(b.name))
-    .map(item => ({
-      ...item,
-      amount: roundAmount(item.unit, item.amount)   // ← rounding step
-    }));
-
-  // 3️⃣  render the list in the modal
-  modalTitle.textContent = 'Your Shopping List';
-  modalBody.innerHTML = list
-    .map(i => `<li>${i.amount} ${i.unit} ${i.name}</li>`).join('');
-  modalActions.innerHTML = `
-    <button class="btn btn-primary" id="copy-list">Copy</button>
-    <button class="btn btn-primary" id="download-list">Download .txt</button>
-  `;
-
-  // copy button
-  document.getElementById('copy-list').onclick = () => {
-    const txt = list.map(i => `${i.amount} ${i.unit} ${i.name}`).join('\n');
-    navigator.clipboard.writeText(txt).then(()=>alert('Copied!'));
-  };
-  // download button
-  document.getElementById('download-list').onclick = () => {
-    const txt = list.map(i => `${i.amount} ${i.unit} ${i.name}`).join('\n');
-    const blob = new Blob([txt], {type:'text/plain'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'shopping-list.txt';
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
-  modal.classList.add('show');   // show the final list
-}
-
-/* --------------------------------------------------------------
-   8️⃣  EVENT LISTENERS
-   -------------------------------------------------------------- */
-document.getElementById('make-list')
-        .addEventListener('click', buildShoppingList);
-
-/* --------------------------------------------------------------
-   9️⃣  INITIAL RENDER
-   -------------------------------------------------------------- */
-renderGallery();
-</script>
-</body>
-</html><!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Recipe Tiles – Random Ingredients Demo</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-/* --------------------------------------------------------------
-   BASIC LAYOUT & GRID
-   -------------------------------------------------------------- */
-body {font-family:system-ui,Arial,sans-serif;background:#f9fafb;margin:0;padding:1rem;}
-h1 {font-size:1.8rem;margin-bottom:1rem;}
-.grid {display:grid;}
-.sm\:grid-cols-2 {grid-template-columns:repeat(2,1fr);}
-.md\:grid-cols-3 {grid-template-columns:repeat(3,1fr);}
-.lg\:grid-cols-4 {grid-template-columns:repeat(4,1fr);}
-.gap-4 {gap:1rem;}
-
-/* --------------------------------------------------------------
-   TILE (CARD) STYLING
-   -------------------------------------------------------------- */
-.recipe-card{
-  position:relative;
-  border-radius:.5rem;
-  overflow:hidden;
-  box-shadow:0 2px 6px rgba(0,0,0,.1);
-  cursor:pointer;
-  transition:transform .15s ease,box-shadow .15s ease;
-}
-.recipe-card:hover{
-  transform:translateY(-2px);
-  box-shadow:0 4px 12px rgba(0,0,0,.15);
-}
-.recipe-card img{
-  width:100%;height:180px;object-fit:cover;display:block;
-}
-.recipe-card .title{
-  position:absolute; inset-inline:0; bottom:0;
-  background:rgba(0,0,0,.45);color:#fff;padding:.4rem .6rem;
-  font-weight:600;
-}
-.recipe-card.selected::after{
-  content:"✔";
-  position:absolute;top:.6rem;left:.6rem;
-  background:#28a745;color:#fff;
-  width:1.6rem;height:1.6rem;border-radius:50%;
-  font-size:1rem;line-height:1.6rem;text-align:center;
-}
-
-/* --------------------------------------------------------------
-   MODAL (for ingredient view & shopping list)
-   -------------------------------------------------------------- */
-.modal{
-  position:fixed; inset:0; background:rgba(0,0,0,.4);
-  display:flex; align-items:center; justify-content:center;
-  visibility:hidden; opacity:0; transition:opacity .2s;
-}
-.modal.show{visibility:visible; opacity:1;}
-.modal .dialog{
-  background:#fff; border-radius:.5rem; max-width:90%;
-  max-height:90%; overflow:auto; padding:1.5rem; position:relative;
-}
-.modal .close{
-  position:absolute; top:.5rem; right:.5rem;
-  background:none; border:none; font-size:1.4rem;
-  cursor:pointer; color:#666;
-}
-.modal h2{margin-top:0;}
-.modal ul{margin:0;padding:0;list-style:none;}
-.modal li{margin-bottom:.4rem;}
-
-/* --------------------------------------------------------------
-   BUTTONS
-   -------------------------------------------------------------- */
-button{
-  font:inherit; cursor:pointer;
-}
-.btn{
-  display:inline-block; padding:.5rem 1rem;
-  border-radius:.4rem; border:none;
-}
-.btn-primary{background:#28a745;color:#fff;}
-.btn-primary:disabled{background:#94d3a2;cursor:not-allowed;}
-.btn-secondary{background:#6c757d;color:#fff;}
-</style>
-</head>
-<body>
-
-<h1>Recipe Tiles – Random Ingredients Demo</h1>
-
-<!-- -----------------------------------------------------------------
-     1️⃣  GALLERY – tiles will be injected here
-     ----------------------------------------------------------------- -->
-<div id="gallery" class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"></div>
-
-<!-- -----------------------------------------------------------------
-     2️⃣  BUTTON – generates a combined shopping list from selected tiles
-     ----------------------------------------------------------------- -->
-<div style="margin-top:1rem;">
-  <button id="make-list" class="btn btn-primary" disabled>
-    Get Shopping List (<span id="count">0</span>)
-  </button>
-</div>
-
-<!-- -----------------------------------------------------------------
-     3️⃣  MODAL – used for two purposes:
-          a) show a single recipe’s ingredients
-          b) show the aggregated shopping list
-     ----------------------------------------------------------------- -->
-<div id="modal" class="modal" role="dialog" aria-modal="true">
-  <div class="dialog">
-    <button class="close" aria-label="Close">&times;</button>
-    <h2 id="modal-title"></h2>
-    <ul id="modal-body"></ul>
-    <div id="modal-actions" style="margin-top:1rem; text-align:right;"></div>
-  </div>
-</div>
-
-<script>
-/* ==============================================================
-   0️⃣  HELPERS – random ingredient generator
-   ============================================================== */
-const INGREDIENT_POOL = [
-  {name:"Flour", unit:"g"},
-  {name:"Sugar", unit:"g"},
-  {name:"Butter", unit:"g"},
-  {name:"Eggs", unit:"pcs"},
-  {name:"Milk", unit:"ml"},
-  {name:"Olive oil", unit:"tbsp"},
-  {name:"Tomatoes", unit:"pcs"},
-  {name:"Cucumber", unit:"pcs"},
-  {name:"Chicken breast", unit:"g"},
-  {name:"Garlic", unit:"clove"},
-  {name:"Onion", unit:"pcs"},
-  {name:"Salt", unit:"tsp"},
-  {name:"Pepper", unit:"tsp"},
-  {name:"Cheddar cheese", unit:"g"},
-  {name:"Basil", unit:"tsp"},
-  {name:"Lemon", unit:"pcs"},
-  {name:"Rice", unit:"g"},
-  {name:"Soy sauce", unit:"tbsp"},
-  {name:"Honey", unit:"tbsp"},
-  {name:"Cocoa powder", unit:"g"}
-];
-
-/* Return a random integer between min (inclusive) and max (exclusive) */
-function randInt(min, max){return Math.floor(Math.random()*(max-min))+min}
-
-/* Build a random ingredient list (3‑7 items) */
-function randomIngredients(){
-  const count = randInt(3,8);
-  const chosen = new Set();
-  const list = [];
-  while(list.length<count){
-    const idx = randInt(0, INGREDIENT_POOL.length);
-    const poolItem = INGREDIENT_POOL[idx];
-    const key = poolItem.name+'|'+poolItem.unit;
-    if(chosen.has(key)) continue;        // avoid duplicates inside one recipe
-    chosen.add(key);
-    const amount = (Math.random()*3+0.5).toFixed(2); // 0.5‑3.5 of the unit
-    list.push({name:poolItem.name, unit:poolItem.unit, amount:+amount});
-  }
-  return list;
-}
-
-/* ==============================================================
-   1️⃣  SAMPLE RECIPE DATA – each recipe gets a random list
-   ============================================================== */
-const recipes = [
-  {
-    id:1,
-    title:"Spaghetti Carbonara",
-    image:"https://images.unsplash.com/photo-1604909052503-58a9a5c5d8e6?auto=format&fit=crop&w=400&q=80"
-  },
-  {
-    id:2,
-    title:"Greek Salad",
-    image:"https://images.unsplash.com/photo-1562967916-eb82221dfb42?auto=format&fit=crop&w=400&q=80"
-  },
-  {
-    id:3,
-    title:"Banana Pancakes",
-    image:"https://images.unsplash.com/photo-1587737236902-4faa3e0e45b2?auto=format&fit=crop&w=400&q=80"
-  },
-  {
-    id:4,
-    title:"Sushi Platter",
-    image:"https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=400&q=80"
-  },
-  {
-    id:5,
-    title:"Avocado Toast",
-    image:"https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=400&q=80"
-  },
-  {
-    id:6,
-    title:"Chocolate Brownies",
-    image:"https://images.unsplash.com/photo-1605476043765-3c9e7d7f9e0f?auto=format&fit=crop&w=400&q=80"
-  },
-  {
-    id:7,
-    title:"Taco Fiesta",
-    image:"https://images.unsplash.com/photo-1552332386-f8dd00dc4c1e?auto=format&fit=crop&w=400&q=80"
-  },
-  {
-    id:8,
-    title:"Miso Soup",
-    image:"https://images.unsplash.com/photo-1588457262650-0a1c2e7b0c5f?auto=format&fit=crop&w=400&q=80"
-  }
-];
-
-// Attach a random ingredient list to each recipe
-recipes.forEach(r => r.ingredients = randomIngredients());
-
-/* ==============================================================
-   2️⃣  RENDER GALLERY (tiles) + click handling
-   ============================================================== */
-const gallery = document.getElementById('gallery');
-const selected = new Set();          // IDs of recipes that are selected
-const countSpan = document.getElementById('count');
-const makeListBtn = document.getElementById('make-list');
-
-function renderGallery(){
-  gallery.innerHTML = '';
-  recipes.forEach(r => {
-    const card = document.createElement('div');
-    card.className = 'recipe-card';
-    if(selected.has(r.id)) card.classList.add('selected');
-
-    // whole card is clickable – two behaviours:
-    //  • normal click → open ingredient modal
-    //  • shift‑click (or ctrl‑click) → toggle selection
-    card.addEventListener('click', e => {
-      // If user holds Shift (or Ctrl/Meta) we only toggle selection,
-      // otherwise we open the ingredient view.
-      if(e.shiftKey || e.ctrlKey || e.metaKey){
-        toggleSelect(r.id, card);
-      }else{
-        openIngredientModal(r);
-      }
-    });
-
-    card.innerHTML = `
-      <img src="${r.image}" alt="${r.title}">
-      <div class="title">${r.title}</div>
-    `;
-    gallery.appendChild(card);
-  });
-}
-
-/* --------------------------------------------------------------
-   Toggle selection (adds/removes the green check‑mark)
-   -------------------------------------------------------------- */
-function toggleSelect(id, card){
-  if(selected.has(id)){
-    selected.delete(id);
-    card.classList.remove('selected');
-  }else{
-    selected.add(id);
-    card.classList.add('selected');
-  }
-  countSpan.textContent = selected.size;
-  makeListBtn.disabled = selected.size===0;
-}
-
-/* ==============================================================
-   3️⃣  MODAL LOGIC (ingredient view & shopping list)
-   ============================================================== */
-const modal = document.getElementById('modal');
-const modalTitle = document.getElementById('modal-title');
-const modalBody = document.getElementById('modal-body');
-const modalActions = document.getElementById('modal-actions');
-const closeBtn = modal.querySelector('.close');
-
-closeBtn.addEventListener('click', () => modal.classList.remove('show'));
-modal.addEventListener('click', e => {
-  if(e.target===modal) modal.classList.remove('show');
-});
-
-/* Show a single recipe’s ingredients */
-function openIngredientModal(recipe){
-  modalTitle.textContent = recipe.title;
-  modalBody.innerHTML = recipe.ingredients.map(i =>
-    `<li>${i.amount} ${i.unit} ${i.name}</li>`).join('');
-  modalActions.innerHTML = `
-    <button class="btn btn-secondary" id="select-toggle">
-      ${selected.has(recipe.id) ? 'Deselect' : 'Select'}
-    </button>
-  `;
-  // button inside modal to toggle selection
-  document.getElementById('select-toggle').onclick = () => {
-    // find the card element in the gallery to toggle its class too
-    const card = [...gallery.children].find(c => {
-      const title = c.querySelector('.title').textContent;
-      return title===recipe.title;
-    });
-    toggleSelect(recipe.id, card);
-    // update button label
-    document.getElementById('select-toggle')
-            .textContent = selected.has(recipe.id) ? 'Deselect' : 'Select';
-  };
-  modal.classList.add('show');
-}
-
-/* Build the aggregated shopping list from all selected recipes */
-function buildShoppingList(){
-  const aggregated = {};
-
-  recipes.filter(r => selected.has(r.id))
-          .forEach(r => {
-            r.ingredients.forEach(ing => {
-              const key = `${ing.name}|${ing.unit||''}`;
-              if(!aggregated[key]){
-                aggregated[key] = {name:ing.name, unit:ing.unit, amount:0};
-              }
-              aggregated[key].amount += ing.amount;
-            });
-          });
-
-  const list = Object.values(aggregated).sort((a,b)=>a.name.localeCompare(b.name));
-
-  modalTitle.textContent = 'Your Shopping List';
-  modalBody.innerHTML = list.map(i =>
-    `<li>${i.amount.toFixed(2)} ${i.unit} ${i.name}</li>`).join('');
-  modalActions.innerHTML = `
-    <button class="btn btn-primary" id="copy-list">Copy</button>
-    <button class="btn btn-primary" id="download-list">Download .txt</button>
-  `;
-
-  // ---- copy to clipboard -------------------------------------------------
-  document.getElementById('copy-list').onclick = () => {
-    const text = list.map(i => `${i.amount.toFixed(2)} ${i.unit} ${i.name}`).join('\n');
-    navigator.clipboard.writeText(text).then(() => alert('Copied!'));
-  };
-  // ---- download as .txt --------------------------------------------------
-  document.getElementById('download-list').onclick = () => {
-    const text = list.map(i => `${i.amount.toFixed(2)} ${i.unit} ${i.name}`).join('\n');
-    const blob = new Blob([text], {type:'text/plain'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'shopping-list.txt';
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
-  modal.classList.add('show');
-}
-
-/* --------------------------------------------------------------
-   Hook the “Get Shopping List” button
-   -------------------------------------------------------------- */
-makeListBtn.addEventListener('click', buildShoppingList);
-
-/* --------------------------------------------------------------
-   Initial render
-   -------------------------------------------------------------- */
-renderGallery();
-</script>
-</body>
-</html>
+    toggleSelect(recipe
