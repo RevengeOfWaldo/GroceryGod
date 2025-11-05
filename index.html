@@ -2,13 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Recipe Tiles – Full Feature Demo</title>
+<title>Recipe Tiles – Working Demo</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 /* --------------------------------------------------------------
    BASIC LAYOUT & GRID
    -------------------------------------------------------------- */
-body{font-family:system-ui,Arial,sans-serif;background:#f9fafb;margin:0;padding:1rem;}
+body{
+  font-family:system-ui,Arial,sans-serif;
+  background:#f9fafb;
+  margin:0;
+  padding:1rem;
+}
 h1{font-size:1.8rem;margin-bottom:1rem;}
 h2{font-size:1.4rem;margin:1rem 0 .5rem;color:#333;}
 .grid{display:grid;}
@@ -92,10 +97,10 @@ button{font:inherit;cursor:pointer;}
 </head>
 <body>
 
-<h1>Recipe Tiles – Full Feature Demo</h1>
+<h1>Recipe Tiles – Working Demo</h1>
 
 <!-- --------------------------------------------------------------
-     1️⃣  CONTAINER – sections will be injected here
+     1️⃣  GALLERY (categories will be injected here)
      -------------------------------------------------------------- -->
 <div id="gallery"></div>
 
@@ -106,7 +111,7 @@ button{font:inherit;cursor:pointer;}
 </div>
 
 <!-- --------------------------------------------------------------
-     2️⃣  MODAL – used for ingredient view *and* final list
+     2️⃣  MODAL – shared for ingredient view & final list
      -------------------------------------------------------------- -->
 <div id="modal" class="modal" role="dialog" aria-modal="true">
   <div class="dialog">
@@ -122,7 +127,7 @@ button{font:inherit;cursor:pointer;}
    0️⃣  HELPERS – rounding, etc.
    ============================================================== */
 function roundAmount(unit, amount){
-  if (!unit) return Math.ceil(amount);                // count → whole number
+  if (!unit) return Math.ceil(amount);                 // count → whole number
   const u = unit.toLowerCase();
   if (u === 'g' || u === 'kg') return Math.ceil(amount/50)*50;   // 50 g steps
   if (u === 'ml' || u === 'l') return Math.ceil(amount/100)*100; // 100 ml steps
@@ -131,13 +136,13 @@ function roundAmount(unit, amount){
 }
 
 /* ==============================================================
-   1️⃣  RECIPE DATA – includes a `category` field
+   1️⃣  RECIPE DATA – each has a public Unsplash image and a category
    ============================================================== */
 const recipes = [
   {
     id:1,
     title:"Spaghetti Carbonara",
-    image:"https://images.unsplash.com/photo-1604909052503-58a9a5c5d8e6?auto=format&fit=crop&w=400&q=80",
+    image:"https://source.unsplash.com/400x300/?spaghetti,carbonara",
     category:"beef",
     ingredients:[
       {name:"Spaghetti",      unit:"g",   amount:400},
@@ -150,7 +155,7 @@ const recipes = [
   {
     id:2,
     title:"Greek Salad",
-    image:"https://images.unsplash.com/photo-1562967916-eb82221dfb42?auto=format&fit=crop&w=400&q=80",
+    image:"https://source.unsplash.com/400x300/?greek,salad",
     category:"veggie",
     ingredients:[
       {name:"Cucumber",   unit:"",    amount:1},
@@ -164,7 +169,7 @@ const recipes = [
   {
     id:3,
     title:"Banana Pancakes",
-    image:"https://images.unsplash.com/photo-1587737236902-4faa3e0e45b2?auto=format&fit=crop&w=400&q=80",
+    image:"https://source.unsplash.com/400x300/?banana,pancakes",
     category:"veggie",
     ingredients:[
       {name:"Banana", unit:"", amount:2},
@@ -177,8 +182,8 @@ const recipes = [
   {
     id:4,
     title:"Sushi Platter",
-    image:"https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=400&q=80",
-    category:"pork",               // demo‑only
+    image:"https://source.unsplash.com/400x300/?sushi",
+    category:"pork",               // demo purpose
     ingredients:[
       {name:"Sushi rice", unit:"g", amount:250},
       {name:"Nori sheets",unit:"pcs", amount:5},
@@ -190,7 +195,7 @@ const recipes = [
   {
     id:5,
     title:"Chicken Teriyaki",
-    image:"https://images.unsplash.com/photo-1553621042-f6e147245754?auto=format&fit=crop&w=400&q=80",
+    image:"https://source.unsplash.com/400x300/?chicken,teriyaki",
     category:"chicken",
     ingredients:[
       {name:"Chicken breast", unit:"g", amount:400},
@@ -203,7 +208,7 @@ const recipes = [
   {
     id:6,
     title:"Beef Stir‑Fry",
-    image:"https://images.unsplash.com/photo-1551218808-94e220e084d2?auto=format&fit=crop&w=400&q=80",
+    image:"https://source.unsplash.com/400x300/?beef,stirfry",
     category:"beef",
     ingredients:[
       {name:"Beef strips", unit:"g", amount:300},
@@ -216,7 +221,7 @@ const recipes = [
   {
     id:7,
     title:"Veggie Wrap",
-    image:"https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=80",
+    image:"https://source.unsplash.com/400x300/?veggie,wrap",
     category:"veggie",
     ingredients:[
       {name:"Tortilla", unit:"pcs", amount:2},
@@ -232,7 +237,7 @@ const recipes = [
    2️⃣  GLOBAL STATE
    ============================================================== */
 const selected = new Set();   // IDs of recipes the user selected
-let tileCounter = 1;          // will be reset each render
+let tileCounter = 1;          // reset each render
 
 /* --------------------------------------------------------------
    3️⃣  MODAL LOGIC (open / close)
@@ -250,18 +255,18 @@ modal.addEventListener('click', e => { if(e.target===modal) modal.classList.remo
 function renderGallery(){
   const container = document.getElementById('gallery');
   container.innerHTML = '';
-  tileCounter = 1;                       // start numbers again
+  tileCounter = 1;                       // start numbering again
 
   const categories = { beef: [], chicken: [], pork: [], veggie: [] };
 
-  // split recipes by category (fallback to veggie)
+  // put each recipe into its category (fallback to veggie)
   recipes.forEach(r => {
     const cat = (r.category||'veggie').toLowerCase();
     if (!categories[cat]) categories[cat] = [];
     categories[cat].push(r);
   });
 
-  // create a section for each non‑empty category
+  // build a section for every non‑empty category
   Object.entries(categories).forEach(([cat, recs]) => {
     if (!recs.length) return;
 
@@ -279,17 +284,17 @@ function renderGallery(){
       card.className = 'recipe-card';
       if (selected.has(recipe.id)) card.classList.add('selected');
 
-      /* ---- build the inner HTML first ---- */
+      /* ---- inner HTML first (image + title) ---- */
       card.innerHTML = `
         <img src="${recipe.image}" alt="${recipe.title}">
         <div class="title">${recipe.title}</div>
       `;
 
-      /* ---- number overlay (unique) ---- */
+      /* ---- unique number overlay ---- */
       const numberOverlay = document.createElement('span');
       numberOverlay.className = 'tile-number';
       numberOverlay.textContent = tileCounter++;
-      card.prepend(numberOverlay);      // put it on top of the image
+      card.prepend(numberOverlay);   // on top of the image
 
       /* ---- click handling ---- */
       card.addEventListener('click', e => {
@@ -330,14 +335,4 @@ function openIngredientModal(recipe){
   modalTitle.textContent = recipe.title;
   modalBody.innerHTML = recipe.ingredients
     .map(i => `<li>${i.amount} ${i.unit} ${i.name}</li>`).join('');
-  modalActions.innerHTML = `
-    <button class="btn btn-secondary" id="select-toggle">
-      ${selected.has(recipe.id) ? 'Deselect' : 'Select'}
-    </button>
-  `;
-
-  // toggle‑selection button inside the ingredient modal
-  document.getElementById('select-toggle').onclick = () => {
-    const card = [...document.querySelectorAll('.recipe-card')]
-                 .find(c => c.querySelector('.title').textContent===recipe.title);
-    toggleSelect(recipe
+  modalActions.innerHTML =
