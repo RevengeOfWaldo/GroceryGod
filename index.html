@@ -94,5 +94,285 @@ button{font:inherit;cursor:pointer;}
 </style>
 </head>
 <body>
-<!-- Keep the same HTML body content -->
-<!-- ... rest of your HTML stays the same ... -->
+
+<h1>Recipe Tiles – Fixed Version</h1>
+
+<div id="gallery"></div>
+
+<div style="margin-top:1rem;">
+  <button id="make-list" class="btn btn-primary" disabled>
+    Get Shopping List (<span id="count">0</span>)
+  </button>
+</div>
+
+<div id="modal" class="modal" role="dialog" aria-modal="true">
+  <div class="dialog">
+    <button class="close" aria-label="Close">&times;</button>
+    <h2 id="modal-title"></h2>
+    <ul id="modal-body"></ul>
+    <div id="modal-actions" style="margin-top:1rem;text-align:right;"></div>
+  </div>
+</div>
+
+<script>
+/* ---------- Helper: round up to a realistic purchase size ---------- */
+function roundAmount(unit, amount) {
+  if (!unit) return Math.ceil(amount);
+  var u = unit.toLowerCase();
+  if (u === 'g' || u === 'kg') return Math.ceil(amount / 50) * 50;
+  if (u === 'ml' || u === 'l') return Math.ceil(amount / 100) * 100;
+  if (u === 'tbsp' || u === 'tsp' || u === 'cup') return Math.ceil(amount);
+  return Math.ceil(amount);
+}
+
+/* ---------- Recipe data ---------- */
+var recipes = [
+  { id:1, title:"Spaghetti Carbonara",
+    image:"https://picsum.photos/seed/spaghetti/400/300",
+    category:"beef",
+    ingredients:[
+      {name:"Spaghetti",unit:"g",amount:400},
+      {name:"Pancetta",unit:"g",amount:150},
+      {name:"Eggs",unit:"",amount:4},
+      {name:"Parmesan cheese",unit:"g",amount:100},
+      {name:"Black pepper",unit:"tsp",amount:0.5}
+    ]
+  },
+  { id:2, title:"Greek Salad",
+    image:"https://picsum.photos/seed/greek/400/300",
+    category:"veggie",
+    ingredients:[
+      {name:"Cucumber",unit:"",amount:1},
+      {name:"Tomatoes",unit:"",amount:2},
+      {name:"Feta cheese",unit:"g",amount:150},
+      {name:"Olives",unit:"",amount:50},
+      {name:"Olive oil",unit:"tbsp",amount:2},
+      {name:"Oregano",unit:"tsp",amount:0.5}
+    ]
+  },
+  { id:3, title:"Banana Pancakes",
+    image:"https://picsum.photos/seed/pancakes/400/300",
+    category:"veggie",
+    ingredients:[
+      {name:"Banana",unit:"",amount:2},
+      {name:"Flour",unit:"g",amount:120},
+      {name:"Milk",unit:"ml",amount:200},
+      {name:"Eggs",unit:"",amount:1},
+      {name:"Sugar",unit:"tbsp",amount:1}
+    ]
+  },
+  { id:4, title:"Sushi Platter",
+    image:"https://picsum.photos/seed/sushi/400/300",
+    category:"pork",
+    ingredients:[
+      {name:"Sushi rice",unit:"g",amount:250},
+      {name:"Nori sheets",unit:"pcs",amount:5},
+      {name:"Salmon",unit:"g",amount:150},
+      {name:"Soy sauce",unit:"tbsp",amount:2},
+      {name:"Wasabi",unit:"tsp",amount:0.5}
+    ]
+  },
+  { id:5, title:"Chicken Teriyaki",
+    image:"https://picsum.photos/seed/chicken/400/300",
+    category:"chicken",
+    ingredients:[
+      {name:"Chicken breast",unit:"g",amount:400},
+      {name:"Soy sauce",unit:"tbsp",amount:3},
+      {name:"Mirin",unit:"tbsp",amount:2},
+      {name:"Sugar",unit:"tbsp",amount:1},
+      {name:"Sesame oil",unit:"tbsp",amount:1}
+    ]
+  },
+  { id:6, title:"Beef Stir‑Fry",
+    image:"https://picsum.photos/seed/beef/400/300",
+    category:"beef",
+    ingredients:[
+      {name:"Beef strips",unit:"g",amount:300},
+      {name:"Broccoli",unit:"g",amount:200},
+      {name:"Soy sauce",unit:"tbsp",amount:2},
+      {name:"Garlic",unit:"clove",amount:2},
+      {name:"Sesame oil",unit:"tbsp",amount:1}
+    ]
+  },
+  { id:7, title:"Veggie Wrap",
+    image:"https://picsum.photos/seed/wrap/400/300",
+    category:"veggie",
+    ingredients:[
+      {name:"Tortilla",unit:"pcs",amount:2},
+      {name:"Bell pepper",unit:"pcs",amount:1},
+      {name:"Avocado",unit:"pcs",amount:1},
+      {name:"Lettuce",unit:"g",amount:50},
+      {name:"Hummus",unit:"tbsp",amount:2}
+    ]
+  }
+];
+
+/* ---------- Global state ---------- */
+var selected = {};
+var tileCounter = 1;
+
+/* ---------- Modal helpers ---------- */
+var modal = document.getElementById('modal');
+var modalTitle = document.getElementById('modal-title');
+var modalBody  = document.getElementById('modal-body');
+var modalActions = document.getElementById('modal-actions');
+
+document.querySelector('#modal .close').onclick = function () {
+  modal.className = 'modal';
+};
+modal.onclick = function (e) {
+  if (e.target === modal) { modal.className = 'modal'; }
+};
+
+/* ---------- Render gallery ---------- */
+function renderGallery() {
+  var container = document.getElementById('gallery');
+  container.innerHTML = '';
+  tileCounter = 1;
+
+  var categories = { beef: [], chicken: [], pork: [], veggie: [] };
+  var i, r, cat, section, heading, grid, card, num;
+
+  // split recipes by category
+  for (i = 0; i < recipes.length; i++) {
+    r = recipes[i];
+    cat = (r.category || 'veggie').toLowerCase();
+    if (!categories[cat]) { categories[cat] = []; }
+    categories[cat].push(r);
+  }
+
+  // create sections
+  for (cat in categories) {
+    if (categories.hasOwnProperty(cat) && categories[cat].length) {
+      section = document.createElement('section');
+
+      heading = document.createElement('h2');
+      heading.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+      section.appendChild(heading);
+
+      grid = document.createElement('div');
+      grid.className = 'grid gap-4';
+
+      for (i = 0; i < categories[cat].length; i++) {
+        r = categories[cat][i];
+        card = document.createElement('div');
+        card.className = 'recipe-card';
+        if (selected[r.id]) { card.className += ' selected'; }
+
+        card.innerHTML = '<img src="' + r.image + '" alt="' + r.title + '">'
+                       + '<div class="title">' + r.title + '</div>';
+
+        num = document.createElement('span');
+        num.className = 'tile-number';
+        num.textContent = tileCounter++;
+        card.insertBefore(num, card.firstChild);
+
+        (function (recipe, element) {
+          element.onclick = function (e) {
+            if (e.shiftKey || e.ctrlKey || e.metaKey) {
+              toggleSelect(recipe.id, element);
+            } else {
+              openIngredientModal(recipe);
+            }
+          };
+        })(r, card);
+
+        grid.appendChild(card);
+      }
+
+      section.appendChild(grid);
+      container.appendChild(section);
+    }
+  }
+}
+
+/* ---------- Toggle selection ---------- */
+function toggleSelect(id, element) {
+  if (selected[id]) {
+    delete selected[id];
+    element.className = element.className.replace(/\bselected\b/g, '').replace(/\s+/g, ' ').trim();
+  } else {
+    selected[id] = true;
+    if (element.className.indexOf('selected') === -1) {
+      element.className += ' selected';
+    }
+  }
+  document.getElementById('count').textContent = Object.keys(selected).length;
+  document.getElementById('make-list').disabled = Object.keys(selected).length === 0;
+}
+
+/* ---------- Ingredient modal ---------- */
+function openIngredientModal(recipe) {
+  modalTitle.textContent = recipe.title;
+  var html = '';
+  var i;
+  for (i = 0; i < recipe.ingredients.length; i++) {
+    var ing = recipe.ingredients[i];
+    html += '<li>' + ing.amount + ' ' + ing.unit + ' ' + ing.name + '</li>';
+  }
+  modalBody.innerHTML = html;
+  modalActions.innerHTML = '<button class="btn btn-secondary" id="select-toggle">'
+                         + (selected[recipe.id] ? 'Deselect' : 'Select')
+                         + '</button>';
+
+  document.getElementById('select-toggle').onclick = function () {
+    var cards = document.getElementsByClassName('recipe-card');
+    var j, card;
+    for (j = 0; j < cards.length; j++) {
+      if (cards[j].querySelector('.title').textContent === recipe.title) {
+        card = cards[j];
+        break;
+      }
+    }
+    toggleSelect(recipe.id, card);
+    this.textContent = selected[recipe.id] ? 'Deselect' : 'Select';
+  };
+
+  modal.className = 'modal show';
+}
+
+/* ---------- Build shopping list ---------- */
+function buildShoppingList() {
+  modal.className = 'modal';
+
+  var aggregated = {};
+  var i, r, ing, key;
+
+  for (i = 0; i < recipes.length; i++) {
+    r = recipes[i];
+    if (!selected[r.id]) continue;
+    for (var j = 0; j < r.ingredients.length; j++) {
+      ing = r.ingredients[j];
+      key = ing.name + '|' + (ing.unit || '');
+      if (!aggregated[key]) {
+        aggregated[key] = {name: ing.name, unit: ing.unit, amount: 0};
+      }
+      aggregated[key].amount += ing.amount;
+    }
+  }
+
+  var list = [];
+  for (key in aggregated) {
+    if (aggregated.hasOwnProperty(key)) {
+      var item = aggregated[key];
+      item.amount = roundAmount(item.unit, item.amount);
+      list.push(item);
+    }
+  }
+  list.sort(function (a, b) { return a.name.localeCompare(b.name); });
+
+  modalTitle.textContent = 'Your Shopping List';
+  var html = '';
+  for (var k = 0; k < list.length; k++) {
+    var it = list[k];
+    html += '<li>' + it.amount + ' ' + it.unit + ' ' + it.name + '</li>';
+  }
+  modalBody.innerHTML = html;
+  modalActions.innerHTML = '<button class="btn btn-primary" id="copy-list">Copy</button>'
+                         + '<button class="btn btn-primary" id="download-list">Download .txt</button>';
+
+  document.getElementById('copy-list').onclick = function () {
+    var txt = '';
+    for (var m = 0; m < list.length; m++) {
+      var it = list[m];
+      txt += it.amount + ' ' + it.
