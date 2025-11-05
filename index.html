@@ -136,13 +136,13 @@ function roundAmount(unit, amount){
 }
 
 /* ==============================================================
-   1️⃣  RECIPE DATA – each has a public Unsplash image and a category
+   1️⃣  RECIPE DATA – using picsum.photos for reliable images
    ============================================================== */
 const recipes = [
   {
     id:1,
     title:"Spaghetti Carbonara",
-    image:"https://source.unsplash.com/400x300/?spaghetti,carbonara",
+    image:"https://picsum.photos/seed/spaghetti/400/300",
     category:"beef",
     ingredients:[
       {name:"Spaghetti",      unit:"g",   amount:400},
@@ -155,7 +155,7 @@ const recipes = [
   {
     id:2,
     title:"Greek Salad",
-    image:"https://source.unsplash.com/400x300/?greek,salad",
+    image:"https://picsum.photos/seed/greek/400/300",
     category:"veggie",
     ingredients:[
       {name:"Cucumber",   unit:"",    amount:1},
@@ -169,7 +169,7 @@ const recipes = [
   {
     id:3,
     title:"Banana Pancakes",
-    image:"https://source.unsplash.com/400x300/?banana,pancakes",
+    image:"https://picsum.photos/seed/pancakes/400/300",
     category:"veggie",
     ingredients:[
       {name:"Banana", unit:"", amount:2},
@@ -182,7 +182,7 @@ const recipes = [
   {
     id:4,
     title:"Sushi Platter",
-    image:"https://source.unsplash.com/400x300/?sushi",
+    image:"https://picsum.photos/seed/sushi/400/300",
     category:"pork",               // demo purpose
     ingredients:[
       {name:"Sushi rice", unit:"g", amount:250},
@@ -195,7 +195,7 @@ const recipes = [
   {
     id:5,
     title:"Chicken Teriyaki",
-    image:"https://source.unsplash.com/400x300/?chicken,teriyaki",
+    image:"https://picsum.photos/seed/chicken/400/300",
     category:"chicken",
     ingredients:[
       {name:"Chicken breast", unit:"g", amount:400},
@@ -208,7 +208,7 @@ const recipes = [
   {
     id:6,
     title:"Beef Stir‑Fry",
-    image:"https://source.unsplash.com/400x300/?beef,stirfry",
+    image:"https://picsum.photos/seed/beef/400/300",
     category:"beef",
     ingredients:[
       {name:"Beef strips", unit:"g", amount:300},
@@ -221,7 +221,7 @@ const recipes = [
   {
     id:7,
     title:"Veggie Wrap",
-    image:"https://source.unsplash.com/400x300/?veggie,wrap",
+    image:"https://picsum.photos/seed/wrap/400/300",
     category:"veggie",
     ingredients:[
       {name:"Tortilla", unit:"pcs", amount:2},
@@ -236,8 +236,8 @@ const recipes = [
 /* ==============================================================
    2️⃣  GLOBAL STATE
    ============================================================== */
-const selected = new Set();   // IDs of recipes the user selected
-let tileCounter = 1;          // reset each render
+const selected = new Set();   // IDs of recipes the user has selected
+let tileCounter = 1;          // resets each gallery render
 
 /* --------------------------------------------------------------
    3️⃣  MODAL LOGIC (open / close)
@@ -246,8 +246,9 @@ const modal = document.getElementById('modal');
 const modalTitle = document.getElementById('modal-title');
 const modalBody  = document.getElementById('modal-body');
 const modalActions = document.getElementById('modal-actions');
+
 document.querySelector('#modal .close').addEventListener('click', () => modal.classList.remove('show'));
-modal.addEventListener('click', e => { if(e.target===modal) modal.classList.remove('show'); });
+modal.addEventListener('click', e => { if (e.target===modal) modal.classList.remove('show'); });
 
 /* --------------------------------------------------------------
    4️⃣  RENDER GALLERY – grouped by category
@@ -259,10 +260,10 @@ function renderGallery(){
 
   const categories = { beef: [], chicken: [], pork: [], veggie: [] };
 
-  // put each recipe into its category (fallback to veggie)
+  // assign each recipe to its category (fallback to veggie)
   recipes.forEach(r => {
     const cat = (r.category||'veggie').toLowerCase();
-    if (!categories[cat]) categories[cat] = [];
+    if (!categories[cat]) categories[cat] = [];   // safety net
     categories[cat].push(r);
   });
 
@@ -284,7 +285,7 @@ function renderGallery(){
       card.className = 'recipe-card';
       if (selected.has(recipe.id)) card.classList.add('selected');
 
-      /* ---- inner HTML first (image + title) ---- */
+      /* ---- inner HTML (image + title) ---- */
       card.innerHTML = `
         <img src="${recipe.image}" alt="${recipe.title}">
         <div class="title">${recipe.title}</div>
@@ -294,7 +295,7 @@ function renderGallery(){
       const numberOverlay = document.createElement('span');
       numberOverlay.className = 'tile-number';
       numberOverlay.textContent = tileCounter++;
-      card.prepend(numberOverlay);   // on top of the image
+      card.prepend(numberOverlay);   // place on top of the image
 
       /* ---- click handling ---- */
       card.addEventListener('click', e => {
@@ -329,10 +330,94 @@ function toggleSelect(id, card){
 }
 
 /* --------------------------------------------------------------
-   6️⃣  INGREDIENT MODAL (when a tile is clicked)
+   6️⃣  INGREDIENT MODAL (plain click on a tile)
    -------------------------------------------------------------- */
 function openIngredientModal(recipe){
   modalTitle.textContent = recipe.title;
   modalBody.innerHTML = recipe.ingredients
     .map(i => `<li>${i.amount} ${i.unit} ${i.name}</li>`).join('');
-  modalActions.innerHTML =
+  modalActions.innerHTML = `
+    <button class="btn btn-secondary" id="select-toggle">
+      ${selected.has(recipe.id) ? 'Deselect' : 'Select'}
+    </button>
+  `;
+
+  // button inside the ingredient modal to toggle selection
+  document.getElementById('select-toggle').onclick = () => {
+    const card = [...document.querySelectorAll('.recipe-card')]
+                 .find(c => c.querySelector('.title').textContent===recipe.title);
+    toggleSelect(recipe.id, card);
+    document.getElementById('select-toggle')
+            .textContent = selected.has(recipe.id) ? 'Deselect' : 'Select';
+  };
+
+  modal.classList.add('show');
+}
+
+/* --------------------------------------------------------------
+   7️⃣  BUILD THE AGGREGATED SHOPPING LIST
+   -------------------------------------------------------------- */
+function buildShoppingList(){
+  // 1️⃣ close any ingredient modal that might be open
+  modal.classList.remove('show');
+
+  const aggregated = {};
+
+  // 2️⃣ collect ingredients from all selected recipes
+  recipes.filter(r => selected.has(r.id)).forEach(r => {
+    r.ingredients.forEach(ing => {
+      const key = `${ing.name}|${ing.unit||''}`;
+      if (!aggregated[key]) aggregated[key] = {name: ing.name, unit: ing.unit, amount: 0};
+      aggregated[key].amount += ing.amount;
+    });
+  });
+
+  // 3️⃣ turn into sorted array and round up to purchase‑size
+  const list = Object.values(aggregated)
+    .sort((a,b)=>a.name.localeCompare(b.name))
+    .map(item => ({
+      ...item,
+      amount: roundAmount(item.unit, item.amount)
+    }));
+
+  // 4️⃣ render the final list
+  modalTitle.textContent = 'Your Shopping List';
+  modalBody.innerHTML = list
+    .map(i => `<li>${i.amount} ${i.unit} ${i.name}</li>`).join('');
+  modalActions.innerHTML = `
+    <button class="btn btn-primary" id="copy-list">Copy</button>
+    <button class="btn btn-primary" id="download-list">Download .txt</button>
+  `;
+
+  // copy to clipboard
+  document.getElementById('copy-list').onclick = () => {
+    const txt = list.map(i => `${i.amount} ${i.unit} ${i.name}`).join('\n');
+    navigator.clipboard.writeText(txt).then(()=>alert('Copied!'));
+  };
+  // download as .txt
+  document.getElementById('download-list').onclick = () => {
+    const txt = list.map(i => `${i.amount} ${i.unit} ${i.name}`).join('\n');
+    const blob = new Blob([txt], {type:'text/plain'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'shopping-list.txt';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  modal.classList.add('show');
+}
+
+/* --------------------------------------------------------------
+   8️⃣  EVENT LISTENERS
+   -------------------------------------------------------------- */
+document.getElementById('make-list')
+        .addEventListener('click', buildShoppingList);
+
+/* --------------------------------------------------------------
+   9️⃣  INITIAL RENDER
+   -------------------------------------------------------------- */
+renderGallery();
+</script>
+</body>
+</html>
