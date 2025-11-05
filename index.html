@@ -2,6 +2,430 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<title>Recipe Tiles – Full Feature Demo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* --------------------------------------------------------------
+   BASIC LAYOUT & GRID
+   -------------------------------------------------------------- */
+body{font-family:system-ui,Arial,sans-serif;background:#f9fafb;margin:0;padding:1rem;}
+h1{font-size:1.8rem;margin-bottom:1rem;}
+h2{font-size:1.4rem;margin:1rem 0 .5rem;color:#333;}
+.grid{display:grid;}
+.sm\:grid-cols-2{grid-template-columns:repeat(2,1fr);}
+.md\:grid-cols-3{grid-template-columns:repeat(3,1fr);}
+.lg\:grid-cols-4{grid-template-columns:repeat(4,1fr);}
+.gap-4{gap:1rem;}
+
+/* --------------------------------------------------------------
+   TILE (CARD) STYLING
+   -------------------------------------------------------------- */
+.recipe-card{
+  position:relative;
+  border-radius:.5rem;
+  overflow:hidden;
+  box-shadow:0 2px 6px rgba(0,0,0,.1);
+  cursor:pointer;
+  transition:transform .15s ease,box-shadow .15s ease;
+}
+.recipe-card:hover{
+  transform:translateY(-2px);
+  box-shadow:0 4px 12px rgba(0,0,0,.15);
+}
+.recipe-card img{
+  width:100%;height:180px;object-fit:cover;display:block;
+}
+.recipe-card .title{
+  position:absolute; inset-inline:0; bottom:0;
+  background:rgba(0,0,0,.45);color:#fff;padding:.4rem .6rem;
+  font-weight:600;
+}
+.recipe-card.selected::after{
+  content:"✔";
+  position:absolute;top:.6rem;left:.6rem;
+  background:#28a745;color:#fff;
+  width:1.6rem;height:1.6rem;border-radius:50%;
+  font-size:1rem;line-height:1.6rem;text-align:center;
+}
+
+/* number overlay – white, 50 % transparent */
+.tile-number{
+  position:absolute;
+  top:.5rem;right:.5rem;
+  color:rgba(255,255,255,0.5);
+  font-weight:bold;
+  font-size:1.1rem;
+}
+
+/* --------------------------------------------------------------
+   MODAL (ingredient view & shopping list)
+   -------------------------------------------------------------- */
+.modal{
+  position:fixed; inset:0; background:rgba(0,0,0,.4);
+  display:flex; align-items:center; justify-content:center;
+  visibility:hidden; opacity:0; transition:opacity .2s;
+}
+.modal.show{visibility:visible; opacity:1;}
+.modal .dialog{
+  background:#fff; border-radius:.5rem; max-width:90%;
+  max-height:90%; overflow:auto; padding:1.5rem; position:relative;
+}
+.modal .close{
+  position:absolute; top:.5rem; right:.5rem;
+  background:none; border:none; font-size:1.4rem;
+  cursor:pointer; color:#666;
+}
+.modal h2{margin-top:0;}
+.modal ul{margin:0;padding:0;list-style:none;}
+.modal li{margin-bottom:.4rem;}
+
+/* --------------------------------------------------------------
+   BUTTONS
+   -------------------------------------------------------------- */
+button{font:inherit;cursor:pointer;}
+.btn{display:inline-block;padding:.5rem 1rem;border-radius:.4rem;border:none;}
+.btn-primary{background:#28a745;color:#fff;}
+.btn-primary:disabled{background:#94d3a2;cursor:not-allowed;}
+.btn-secondary{background:#6c757d;color:#fff;}
+</style>
+</head>
+<body>
+
+<h1>Recipe Tiles – Full Feature Demo</h1>
+
+<!-- --------------------------------------------------------------
+     1️⃣  CONTAINER – sections will be injected here
+     -------------------------------------------------------------- -->
+<div id="gallery"></div>
+
+<div style="margin-top:1rem;">
+  <button id="make-list" class="btn btn-primary" disabled>
+    Get Shopping List (<span id="count">0</span>)
+  </button>
+</div>
+
+<!-- --------------------------------------------------------------
+     2️⃣  MODAL – used for ingredient view *and* final list
+     -------------------------------------------------------------- -->
+<div id="modal" class="modal" role="dialog" aria-modal="true">
+  <div class="dialog">
+    <button class="close" aria-label="Close">&times;</button>
+    <h2 id="modal-title"></h2>
+    <ul id="modal-body"></ul>
+    <div id="modal-actions" style="margin-top:1rem;text-align:right;"></div>
+  </div>
+</div>
+
+<script>
+/* ==============================================================
+   0️⃣  HELPERS – rounding, random data, etc.
+   ============================================================== */
+function roundAmount(unit, amount){
+  // No unit → treat as count → round up to whole number
+  if (!unit) return Math.ceil(amount);
+  const u = unit.toLowerCase();
+  if (u === 'g' || u === 'kg')  return Math.ceil(amount/50)*50;   // nearest 50 g
+  if (u === 'ml' || u === 'l')  return Math.ceil(amount/100)*100; // nearest 100 ml
+  if (u === 'tbsp' || u === 'tsp' || u === 'cup') return Math.ceil(amount);
+  // fallback – whole number
+  return Math.ceil(amount);
+}
+
+/* ==============================================================
+   1️⃣  RECIPE DATA – now includes a `category` field
+   ============================================================== */
+const recipes = [
+  {
+    id:1,
+    title:"Spaghetti Carbonara",
+    image:"https://images.unsplash.com/photo-1604909052503-58a9a5c5d8e6?auto=format&fit=crop&w=400&q=80",
+    category:"beef",
+    ingredients:[
+      {name:"Spaghetti",      unit:"g",   amount:400},
+      {name:"Pancetta",       unit:"g",   amount:150},
+      {name:"Eggs",           unit:"",    amount:4},
+      {name:"Parmesan cheese",unit:"g",   amount:100},
+      {name:"Black pepper",   unit:"tsp", amount:0.5}
+    ]
+  },
+  {
+    id:2,
+    title:"Greek Salad",
+    image:"https://images.unsplash.com/photo-1562967916-eb82221dfb42?auto=format&fit=crop&w=400&q=80",
+    category:"veggie",
+    ingredients:[
+      {name:"Cucumber",   unit:"",    amount:1},
+      {name:"Tomatoes",   unit:"",    amount:2},
+      {name:"Feta cheese",unit:"g",   amount:150},
+      {name:"Olives",     unit:"",    amount:50},
+      {name:"Olive oil",  unit:"tbsp",amount:2},
+      {name:"Oregano",    unit:"tsp", amount:0.5}
+    ]
+  },
+  {
+    id:3,
+    title:"Banana Pancakes",
+    image:"https://images.unsplash.com/photo-1587737236902-4faa3e0e45b2?auto=format&fit=crop&w=400&q=80",
+    category:"veggie",
+    ingredients:[
+      {name:"Banana", unit:"", amount:2},
+      {name:"Flour",  unit:"g", amount:120},
+      {name:"Milk",   unit:"ml", amount:200},
+      {name:"Eggs",   unit:"", amount:1},
+      {name:"Sugar",  unit:"tbsp", amount:1}
+    ]
+  },
+  {
+    id:4,
+    title:"Sushi Platter",
+    image:"https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=400&q=80",
+    category:"pork",               // just for demo purposes
+    ingredients:[
+      {name:"Sushi rice", unit:"g", amount:250},
+      {name:"Nori sheets",unit:"pcs", amount:5},
+      {name:"Salmon", unit:"g", amount:150},
+      {name:"Soy sauce",unit:"tbsp", amount:2},
+      {name:"Wasabi", unit:"tsp", amount:0.5}
+    ]
+  },
+  {
+    id:5,
+    title:"Chicken Teriyaki",
+    image:"https://images.unsplash.com/photo-1553621042-f6e147245754?auto=format&fit=crop&w=400&q=80",
+    category:"chicken",
+    ingredients:[
+      {name:"Chicken breast", unit:"g", amount:400},
+      {name:"Soy sauce", unit:"tbsp", amount:3},
+      {name:"Mirin", unit:"tbsp", amount:2},
+      {name:"Sugar", unit:"tbsp", amount:1},
+      {name:"Sesame oil", unit:"tbsp", amount:1}
+    ]
+  },
+  {
+    id:6,
+    title:"Beef Stir‑Fry",
+    image:"https://images.unsplash.com/photo-1551218808-94e220e084d2?auto=format&fit=crop&w=400&q=80",
+    category:"beef",
+    ingredients:[
+      {name:"Beef strips", unit:"g", amount:300},
+      {name:"Broccoli", unit:"g", amount:200},
+      {name:"Soy sauce", unit:"tbsp", amount:2},
+      {name:"Garlic", unit:"clove", amount:2},
+      {name:"Sesame oil", unit:"tbsp", amount:1}
+    ]
+  },
+  {
+    id:7,
+    title:"Veggie Wrap",
+    image:"https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=80",
+    category:"veggie",
+    ingredients:[
+      {name:"Tortilla", unit:"pcs", amount:2},
+      {name:"Bell pepper", unit:"pcs", amount:1},
+      {name:"Avocado", unit:"pcs", amount:1},
+      {name:"Lettuce", unit:"g", amount:50},
+      {name:"Hummus", unit:"tbsp", amount:2}
+    ]
+  }
+];
+
+/* ==============================================================
+   2️⃣  GLOBAL STATE
+   ============================================================== */
+const selected = new Set();               // recipe IDs the user selected
+let tileCounter = 1;                      // increments for the overlay number
+
+/* --------------------------------------------------------------
+   3️⃣  MODAL LOGIC (open / close)
+   -------------------------------------------------------------- */
+const modal = document.getElementById('modal');
+const modalTitle = document.getElementById('modal-title');
+const modalBody  = document.getElementById('modal-body');
+const modalActions = document.getElementById('modal-actions');
+document.querySelector('#modal .close').addEventListener('click', () => modal.classList.remove('show'));
+modal.addEventListener('click', e => { if(e.target===modal) modal.classList.remove('show'); });
+
+/* --------------------------------------------------------------
+   4️⃣  RENDER GALLERY – grouped by category
+   -------------------------------------------------------------- */
+function renderGallery(){
+  const container = document.getElementById('gallery');
+  container.innerHTML = '';               // clear previous content
+
+  const categories = {
+    beef:    [],
+    chicken: [],
+    pork:    [],
+    veggie:  []
+  };
+
+  // split recipes by category
+  recipes.forEach(r => {
+    const cat = (r.category||'veggie').toLowerCase();
+    if (!categories[cat]) categories[cat] = [];   // safety net
+    categories[cat].push(r);
+  });
+
+  // for each category that actually has recipes, create a section
+  Object.entries(categories).forEach(([cat, recs]) => {
+    if (!recs.length) return; // skip empty categories
+
+    const section = document.createElement('section');
+
+    const heading = document.createElement('h2');
+    heading.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+    section.appendChild(heading);
+
+    const grid = document.createElement('div');
+    grid.className = 'grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4';
+
+    recs.forEach(recipe => {
+      const card = document.createElement('div');
+      card.className = 'recipe-card';
+      if (selected.has(recipe.id)) card.classList.add('selected');
+
+      // number overlay (unique, never repeats)
+      const numberOverlay = document.createElement('span');
+      numberOverlay.className = 'tile-number';
+      numberOverlay.textContent = tileCounter++;
+      card.appendChild(numberOverlay);
+
+      card.innerHTML += `
+        <img src="${recipe.image}" alt="${recipe.title}">
+        <div class="title">${recipe.title}</div>
+      `;
+
+      // click handling – shift/ctrl toggles selection, plain click opens ingredient view
+      card.addEventListener('click', e => {
+        if (e.shiftKey || e.ctrlKey || e.metaKey) {
+          toggleSelect(recipe.id, card);
+        } else {
+          openIngredientModal(recipe);
+        }
+      });
+
+      grid.appendChild(card);
+    });
+
+    section.appendChild(grid);
+    container.appendChild(section);
+  });
+}
+
+/* --------------------------------------------------------------
+   5️⃣  SELECTION TOGGLE
+   -------------------------------------------------------------- */
+function toggleSelect(id, card){
+  if (selected.has(id)){
+    selected.delete(id);
+    card.classList.remove('selected');
+  }else{
+    selected.add(id);
+    card.classList.add('selected');
+  }
+  document.getElementById('count').textContent = selected.size;
+  document.getElementById('make-list').disabled = selected.size===0;
+}
+
+/* --------------------------------------------------------------
+   6️⃣  INGREDIENT MODAL (when a tile is clicked)
+   -------------------------------------------------------------- */
+function openIngredientModal(recipe){
+  modalTitle.textContent = recipe.title;
+  modalBody.innerHTML = recipe.ingredients
+    .map(i => `<li>${i.amount} ${i.unit} ${i.name}</li>`).join('');
+  modalActions.innerHTML = `
+    <button class="btn btn-secondary" id="select-toggle">
+      ${selected.has(recipe.id) ? 'Deselect' : 'Select'}
+    </button>
+  `;
+
+  // toggle‑selection button inside the modal
+  document.getElementById('select-toggle').onclick = () => {
+    // find the card element that belongs to this recipe
+    const card = [...document.querySelectorAll('.recipe-card')]
+                 .find(c => c.querySelector('.title').textContent===recipe.title);
+    toggleSelect(recipe.id, card);
+    // update button label
+    document.getElementById('select-toggle')
+            .textContent = selected.has(recipe.id) ? 'Deselect' : 'Select';
+  };
+
+  modal.classList.add('show');
+}
+
+/* --------------------------------------------------------------
+   7️⃣  BUILD THE AGGREGATED SHOPPING LIST
+   -------------------------------------------------------------- */
+function buildShoppingList(){
+  // close any open ingredient modal first
+  modal.classList.remove('show');
+
+  const aggregated = {};
+
+  // 1️⃣  iterate over selected recipes
+  recipes.filter(r => selected.has(r.id)).forEach(r => {
+    r.ingredients.forEach(ing => {
+      const key = `${ing.name}|${ing.unit||''}`;
+      if (!aggregated[key]) {
+        aggregated[key] = {name: ing.name, unit: ing.unit, amount: 0};
+      }
+      aggregated[key].amount += ing.amount;
+    });
+  });
+
+  // 2️⃣  turn into sorted array and round amounts
+  const list = Object.values(aggregated)
+    .sort((a,b)=>a.name.localeCompare(b.name))
+    .map(item => ({
+      ...item,
+      amount: roundAmount(item.unit, item.amount)   // ← rounding step
+    }));
+
+  // 3️⃣  render the list in the modal
+  modalTitle.textContent = 'Your Shopping List';
+  modalBody.innerHTML = list
+    .map(i => `<li>${i.amount} ${i.unit} ${i.name}</li>`).join('');
+  modalActions.innerHTML = `
+    <button class="btn btn-primary" id="copy-list">Copy</button>
+    <button class="btn btn-primary" id="download-list">Download .txt</button>
+  `;
+
+  // copy button
+  document.getElementById('copy-list').onclick = () => {
+    const txt = list.map(i => `${i.amount} ${i.unit} ${i.name}`).join('\n');
+    navigator.clipboard.writeText(txt).then(()=>alert('Copied!'));
+  };
+  // download button
+  document.getElementById('download-list').onclick = () => {
+    const txt = list.map(i => `${i.amount} ${i.unit} ${i.name}`).join('\n');
+    const blob = new Blob([txt], {type:'text/plain'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'shopping-list.txt';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  modal.classList.add('show');   // show the final list
+}
+
+/* --------------------------------------------------------------
+   8️⃣  EVENT LISTENERS
+   -------------------------------------------------------------- */
+document.getElementById('make-list')
+        .addEventListener('click', buildShoppingList);
+
+/* --------------------------------------------------------------
+   9️⃣  INITIAL RENDER
+   -------------------------------------------------------------- */
+renderGallery();
+</script>
+</body>
+</html><!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
 <title>Recipe Tiles – Random Ingredients Demo</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
