@@ -36,12 +36,13 @@ h2{font-size:1.4rem;margin:1.5rem 0 .5rem;color:#333;border-bottom:2px solid #ee
   padding: .5rem;
   margin-bottom: 1.5rem;
   display: flex;
-  justify-content: absolute;
+  justify-content: center; /* Fixed from 'absolute' to 'center' */
   flex-wrap: wrap;
   gap: .5rem;
   box-shadow: 0 1px 3px rgba(0,0,0,.05);
-  position: center;
-  top: 1rem;
+  /* Removed invalid position and top values */
+  /* position: center; */
+  /* top: 1rem; */
   z-index: 50;
 }
 .menu a {
@@ -217,7 +218,6 @@ button{font:inherit;cursor:pointer;}
   <a href="#section-pork">Pork</a>
   <a href="#section-veggie">Veggie</a>
   <a href="#section-fast/easy">Fast/Easy</a>
-
 </nav>
 
 <div id="gallery"></div>
@@ -254,7 +254,6 @@ button{font:inherit;cursor:pointer;}
   <ol id="recipe-links-list"></ol>
 </section>
 
-
 <script>
 function roundAmount(unit, amount) {
   if (!unit) return Math.ceil(amount);
@@ -290,8 +289,8 @@ var recipes = [
     ]
   },
   { id:3, title:"Banana Pancakes", 
-   category:"veggie",
-   image:"banana-pancakes.jpg", // Fixed broken image
+    category:"veggie",
+    image:"banana-pancakes.jpg", // Fixed broken image
     ingredients:[
       {name:"Banana",unit:"",amount:2},
       {name:"Flour",unit:"g",amount:120},
@@ -387,7 +386,7 @@ function renderGallery() {
   container.innerHTML = '';
   tileCounter = 1;
 
-  var categories = { beef: [], chicken: [], pork: [], veggie: [], fast: [] };[] };
+  var categories = { beef: [], chicken: [], pork: [], veggie: [], fast: [] }; // Fixed syntax: removed duplicate []
   
   for (var i = 0; i < recipes.length; i++) {
     var r = recipes[i];
